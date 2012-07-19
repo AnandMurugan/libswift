@@ -21,7 +21,8 @@ using namespace swift;
 bool InstallHTTPGateway (struct event_base *evbase,Address bindaddr, size_t chunk_size, double *maxspeed, char *storagedir);
 bool HTTPIsSending();
 std::string HTTPGetProgressString(Sha1Hash root_hash);
-
+// statsgw.cpp function
+std::string StatsGetSpeedCallback();
 
 // Local functions
 void ReportCallback(int fd, short event, void *arg);
@@ -30,7 +31,6 @@ struct event evreport;
 int file = -1;
 int attempts = 0;
 bool enginestarted = false;
-
 /*
  * Class:     com_tudelft_swift_NativeLib
  * Method:    start
@@ -48,27 +48,26 @@ JNIEXPORT jstring JNICALL Java_com_tudelft_triblerdroid_first_NativeLib_start (J
 	size_t chunk_size = SWIFT_DEFAULT_CHUNK_SIZE;
 	double maxspeed[2] = {DBL_MAX,DBL_MAX};
 
-    // Ric: added 4 android
-    jboolean blnIsCopy;
+	// Ric: added 4 android
+	jboolean blnIsCopy;
 
-    // Arno: Needs to be done currently for every new download
-    const char * tmpCstr = (env)->GetStringUTFChars(INtracker, &blnIsCopy);
-    Address tracker = Address(tmpCstr);
-    if (tracker==Address())
-        return env->NewStringUTF("address must be hostname:port, ip:port or just port");
-    SetTracker(tracker);
+	// Arno: Needs to be done currently for every new download
+	const char * tmpCstr = (env)->GetStringUTFChars(INtracker, &blnIsCopy);
+	Address tracker = Address(tmpCstr);
+	if (tracker==Address())
+		return env->NewStringUTF("address must be hostname:port, ip:port or just port");
+	SetTracker(tracker);
 
-    (env)->ReleaseStringUTFChars(INtracker , tmpCstr); // release jstring
+	(env)->ReleaseStringUTFChars(INtracker , tmpCstr); // release jstring
 
-    if (enginestarted)
-    	return env->NewStringUTF("started");
-    else
-    {
+	if (enginestarted)
+		return env->NewStringUTF("started");
+	else
+	{
 		// Libevent2 initialization
 		// TODO: don't when in DOWNLOADMODE
 		LibraryInit();
 		Channel::evbase = event_base_new();
-
 		std::string s = "/sdcard/swift/debug.txt";
 		char pidstr[32];
 		sprintf(pidstr,"%d", getpid() );
@@ -104,12 +103,12 @@ JNIEXPORT jstring JNICALL Java_com_tudelft_triblerdroid_first_NativeLib_start (J
 		//evtimer_add(&evreport, tint2tv(TINT_SEC));
 
 		enginestarted = true;
-    }
+	}
 
-    if (!STREAM_MODE)
-    {
-    	if (file != -1)
-    		swift::Close(file);
+	if (!STREAM_MODE)
+	{
+		if (file != -1)
+			swift::Close(file);
 
 		tmpCstr = (env)->GetStringUTFChars(hash, &blnIsCopy);
 		Sha1Hash root_hash = Sha1Hash(true,tmpCstr); // FIXME ambiguity
@@ -120,23 +119,23 @@ JNIEXPORT jstring JNICALL Java_com_tudelft_triblerdroid_first_NativeLib_start (J
 
 		char * filename = (char *)(env)->GetStringUTFChars(destination , &blnIsCopy);
 
-        // Download then play
-        if (root_hash!=Sha1Hash::ZERO && !filename)
-            filename = strdup(root_hash.hex().c_str());
+		// Download then play
+		if (root_hash!=Sha1Hash::ZERO && !filename)
+			filename = strdup(root_hash.hex().c_str());
 
-        if (filename) {
+		if (filename) {
 
-          dprintf("Opening %s writing to %s\n", root_hash.hex().c_str(), filename );
-          file = Open(filename,root_hash);
-          if (file<=0)
-               return env->NewStringUTF("cannot open destination file");
-          printf("Root hash: %s\n", RootMerkleHash(file).hex().c_str());
-        }
-        else
-        	dprintf("Not Opening %s, no dest \n", root_hash.hex().c_str() );
-    }
+			dprintf("Opening %s writing to %s\n", root_hash.hex().c_str(), filename );
+			file = Open(filename,root_hash);
+			if (file<=0)
+				return env->NewStringUTF("cannot open destination file");
+			printf("Root hash: %s\n", RootMerkleHash(file).hex().c_str());
+		}
+		else
+			dprintf("Not Opening %s, no dest \n", root_hash.hex().c_str() );
+	}
 
-    return env->NewStringUTF("started");
+	return env->NewStringUTF("started");
 }
 
 
@@ -170,9 +169,9 @@ JNIEXPORT jstring JNICALL Java_com_tudelft_triblerdroid_first_NativeLib_stop(JNI
 	// Tell mainloop to exit, will release call to progress()
 	event_base_loopexit(Channel::evbase, NULL);
 
-    enginestarted = false;
+	enginestarted = false;
 
-    return env->NewStringUTF("stopped");
+	return env->NewStringUTF("stopped");
 }
 
 
@@ -184,7 +183,7 @@ JNIEXPORT jstring JNICALL Java_com_tudelft_triblerdroid_first_NativeLib_stop(JNI
 JNIEXPORT jstring JNICALL Java_com_tudelft_triblerdroid_first_NativeLib_httpprogress(JNIEnv * env, jobject obj, jstring hash) {
 
 	std::stringstream rets;
-    jboolean blnIsCopy;
+	jboolean blnIsCopy;
 
 	const char * tmpCstr = (env)->GetStringUTFChars(hash, &blnIsCopy);
 
@@ -216,15 +215,15 @@ void ReportCallback(int fd, short event, void *arg) {
 	// Called every second to print/calc some stats
 
 	dprintf("report callback\n");
-    if (true)
-    {
-        // ARNOSMPTODO: Restore fail behaviour when used in SwarmPlayer 3000.
-        if (!HTTPIsSending()) {
-        	// TODO
-        	//event_base_loopexit(Channel::evbase, NULL);
-            return;
-        }
-    }
+	if (true)
+	{
+		// ARNOSMPTODO: Restore fail behaviour when used in SwarmPlayer 3000.
+		if (!HTTPIsSending()) {
+			// TODO
+			//event_base_loopexit(Channel::evbase, NULL);
+			return;
+		}
+	}
 
 	evtimer_add(&evreport, tint2tv(TINT_SEC));
 }
@@ -239,6 +238,18 @@ void ReportCallback(int fd, short event, void *arg) {
  */
 JNIEXPORT jstring JNICALL Java_com_tudelft_triblerdroid_first_NativeLib_hello(JNIEnv * env, jobject obj) {
 
-	return env->NewStringUTF("Hallo from Swift.. Library is working :-)");
+	std::string str = StatsGetSpeedCallback();
+	//return env->NewStringUTF("Hallo from Swift.. Library is working :-)");
+	return env->NewStringUTF(str.c_str());
 }
 
+/*
+ * Class:     com_tudelft_swift_NativeLib
+ * Method:    stats
+ * Signature: ()Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_com_tudelft_triblerdroid_first_NativeLib_stats(JNIEnv * env, jobject obj) {
+
+	std::string str = StatsGetSpeedCallback();
+	return env->NewStringUTF(str.c_str());
+}

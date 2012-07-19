@@ -9,6 +9,9 @@
  */
 
 #include "swift.h"
+#include <sstream>
+#include <stdio.h>
+#include <stdlib.h>
 #include <event2/http.h>
 
 using namespace swift;
@@ -85,13 +88,13 @@ void StatsExitCallback(struct evhttp_request *evreq)
 	evhttp_add_header(headers, "Content-Length", contlenstr );
 	evhttp_add_header(headers, "Accept-Ranges", "none" );
 
-    // Construct evbuffer and send via chunked encoding
-    struct evbuffer *evb = evbuffer_new();
-    int ret = evbuffer_add(evb,exit_page,strlen(exit_page));
-    if (ret < 0) {
-    	print_error("statsgw: ExitCallback: error evbuffer_add");
-        return;
-    }
+	// Construct evbuffer and send via chunked encoding
+	struct evbuffer *evb = evbuffer_new();
+	int ret = evbuffer_add(evb,exit_page,strlen(exit_page));
+	if (ret < 0) {
+		print_error("statsgw: ExitCallback: error evbuffer_add");
+		return;
+	}
 
 	evhttp_send_reply(evreq, 200, "OK", evb);
 	evbuffer_free(evb);
@@ -116,20 +119,20 @@ void StatsOverviewCallback(struct evhttp_request *evreq)
 		dspeed = (int)(((down-statsgw_last_down)/1024) / tdiff);
 		uspeed = (int)(((up-statsgw_last_up)/1024) / tdiff);
 	}
-    //statsgw_last_down = down;
-    //statsgw_last_up = up;
+	//statsgw_last_down = down;
+	//statsgw_last_up = up;
 
 
 	char bodystr[102400];
-    strcpy(bodystr,"");
-    strcat(bodystr,top_page);
+	strcpy(bodystr,"");
+	strcat(bodystr,top_page);
 
-    for (int i=0; i<swift::FileTransfer::files.size(); i++)
-    {
-    	FileTransfer *ft = swift::FileTransfer::files[i];
-    	if (ft != NULL)
-    	{
-    		int fd = ft->fd();
+	for (int i=0; i<swift::FileTransfer::files.size(); i++)
+	{
+		FileTransfer *ft = swift::FileTransfer::files[i];
+		if (ft != NULL)
+		{
+			int fd = ft->fd();
 			uint64_t total = (int)swift::Size(fd);
 			uint64_t down  = (int)swift::Complete(fd);
 			int perc = (int)((down * 100) / total);
@@ -140,8 +143,8 @@ void StatsOverviewCallback(struct evhttp_request *evreq)
 			char templ[1024];
 			sprintf(templ,swarm_page_templ,roothashhexstr, perc, '%', dspeed, uspeed );
 			strcat(bodystr,templ);
-    	}
-    }
+		}
+	}
 
 	strcat(bodystr,bottom_page);
 
@@ -183,26 +186,26 @@ void StatsGetSpeedCallback(struct evhttp_request *evreq)
 		dspeed = (int)(((down-statsgw_last_down)/1024) / tdiff);
 		uspeed = (int)(((up-statsgw_last_up)/1024) / tdiff);
 	}
-    statsgw_last_down = down;
-    statsgw_last_up = up;
-    statsgw_last_time = nu;
+	statsgw_last_down = down;
+	statsgw_last_up = up;
+	statsgw_last_time = nu;
 
-    // Arno: PDD+ wants content speeds too
-    double contentdownspeed = 0.0, contentupspeed = 0.0;
-    uint32_t nleech=0,nseed=0;
-    for (int i=0; i<swift::FileTransfer::files.size(); i++)
-    {
-    	FileTransfer *ft = swift::FileTransfer::files[i];
-    	if (ft != NULL)
-    	{
-    		contentdownspeed += ft->GetCurrentSpeed(DDIR_DOWNLOAD);
-    		contentupspeed += ft->GetCurrentSpeed(DDIR_UPLOAD);
-    		nleech += ft->GetNumLeechers();
-    		nseed += ft->GetNumSeeders();
-    	}
-    }
-    int cdownspeed = (int)(contentdownspeed/1024.0);
-    int cupspeed = (int)(contentupspeed/1024.0);
+	// Arno: PDD+ wants content speeds too
+	double contentdownspeed = 0.0, contentupspeed = 0.0;
+	uint32_t nleech=0,nseed=0;
+	for (int i=0; i<swift::FileTransfer::files.size(); i++)
+	{
+		FileTransfer *ft = swift::FileTransfer::files[i];
+		if (ft != NULL)
+		{
+			contentdownspeed += ft->GetCurrentSpeed(DDIR_DOWNLOAD);
+			contentupspeed += ft->GetCurrentSpeed(DDIR_UPLOAD);
+			nleech += ft->GetNumLeechers();
+			nseed += ft->GetNumSeeders();
+		}
+	}
+	int cdownspeed = (int)(contentdownspeed/1024.0);
+	int cupspeed = (int)(contentupspeed/1024.0);
 
 	char speedstr[1024];
 	sprintf(speedstr,"{\"downspeed\": %d, \"success\": \"true\", \"upspeed\": %d, \"cdownspeed\": %d, \"cupspeed\": %d, \"nleech\": %d, \"nseed\": %d}", dspeed, uspeed, cdownspeed, cupspeed, nleech, nseed );
@@ -227,36 +230,92 @@ void StatsGetSpeedCallback(struct evhttp_request *evreq)
 	evbuffer_free(evb);
 }
 
+std::string StatsGetSpeedCallback()
+{
+	if (statsgw_last_time == 0)
+	{
+		statsgw_last_time = NOW-1000000;
+	}
+
+	tint nu = Channel::Time();
+	uint64_t down = Channel::global_raw_bytes_down;
+	uint64_t up = Channel::global_raw_bytes_up;
+
+	int dspeed = 0, uspeed = 0;
+	tint tdiff = (nu - statsgw_last_time)/1000000;
+	if (tdiff > 0) {
+		dspeed = (int)(((down-statsgw_last_down)/1024) / tdiff);
+		uspeed = (int)(((up-statsgw_last_up)/1024) / tdiff);
+	}
+	statsgw_last_down = down;
+	statsgw_last_up = up;
+	statsgw_last_time = nu;
+
+	// Arno: PDD+ wants content speeds too
+	double contentdownspeed = 0.0, contentupspeed = 0.0;
+	uint32_t nleech=0,nseed=0;
+	for (int i=0; i<swift::FileTransfer::files.size(); i++)
+	{
+		FileTransfer *ft = swift::FileTransfer::files[i];
+		if (ft != NULL)
+		{
+			contentdownspeed += ft->GetCurrentSpeed(DDIR_DOWNLOAD);
+			contentupspeed += ft->GetCurrentSpeed(DDIR_UPLOAD);
+			nleech += ft->GetNumLeechers();
+			nseed += ft->GetNumSeeders();
+		}
+	}
+	int cdownspeed = (int)(contentdownspeed/1024.0);
+	int cupspeed = (int)(contentupspeed/1024.0);
+
+	//dspeed, uspeed, cdownspeed, cupspeed, nleech, nseed
+	std::stringstream ss;
+	ss << dspeed;
+	ss << "/";
+	ss << uspeed;
+	ss << "/";
+	ss << nleech;
+	ss << "/";
+	ss << nseed;
+	ss << "/";
+	ss << (int)statsgw_last_down;
+	ss << "/";
+	ss << (int)statsgw_last_up;
+
+	return ss.str();
+
+
+}
 
 void StatsGwNewRequestCallback (struct evhttp_request *evreq, void *arg) {
 
-    dprintf("%s @%i http new request\n",tintstr(),statsgw_reqs_count);
-    statsgw_reqs_count++;
+	dprintf("%s @%i http new request\n",tintstr(),statsgw_reqs_count);
+	statsgw_reqs_count++;
 
-    if (evhttp_request_get_command(evreq) != EVHTTP_REQ_GET) {
-            return;
-    }
+	if (evhttp_request_get_command(evreq) != EVHTTP_REQ_GET) {
+		return;
+	}
 
-    // Parse URI
-    const char *uri = evhttp_request_get_uri(evreq);
-    //struct evkeyvalq *headers =	evhttp_request_get_input_headers(evreq);
-    //const char *contentrangestr =evhttp_find_header(headers,"Content-Range");
+	// Parse URI
+	const char *uri = evhttp_request_get_uri(evreq);
+	//struct evkeyvalq *headers =	evhttp_request_get_input_headers(evreq);
+	//const char *contentrangestr =evhttp_find_header(headers,"Content-Range");
 
-    fprintf(stderr,"statsgw: GOT %s\n", uri);
+	fprintf(stderr,"statsgw: GOT %s\n", uri);
 
-    if (strstr(uri,"get_speed_info") != NULL)
-    {
-    	StatsGetSpeedCallback(evreq);
-    }
-    else if (!strncmp(uri,"/webUI/exit",strlen("/webUI/exit")) || statsgw_quit_process)
-    {
-    	statsgw_quit_process = true;
-    	StatsExitCallback(evreq);
-    }
-    else if (!strncmp(uri,"/webUI",strlen("/webUI")))
-    {
-    	StatsOverviewCallback(evreq);
-    }
+	if (strstr(uri,"get_speed_info") != NULL)
+	{
+		StatsGetSpeedCallback(evreq);
+	}
+	else if (!strncmp(uri,"/webUI/exit",strlen("/webUI/exit")) || statsgw_quit_process)
+	{
+		statsgw_quit_process = true;
+		StatsExitCallback(evreq);
+	}
+	else if (!strncmp(uri,"/webUI",strlen("/webUI")))
+	{
+		StatsOverviewCallback(evreq);
+	}
 }
 
 
