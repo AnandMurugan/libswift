@@ -238,9 +238,7 @@ void ReportCallback(int fd, short event, void *arg) {
  */
 JNIEXPORT jstring JNICALL Java_com_tudelft_triblerdroid_first_NativeLib_hello(JNIEnv * env, jobject obj) {
 
-	std::string str = StatsGetSpeedCallback();
-	//return env->NewStringUTF("Hallo from Swift.. Library is working :-)");
-	return env->NewStringUTF(str.c_str());
+	return env->NewStringUTF("Hallo from Swift.. Library is working :-)");
 }
 
 /*
